@@ -2,7 +2,7 @@
 
   <h1>🧠 LLM System Patterns</h1>
 
-  <p><strong>Production design patterns, latency budgets, failure modes, and architectural trade-offs for building real-world LLM systems, RAG pipelines, and autonomous AI agents.</strong></p>
+  <p><strong>A comprehensive, production-grade guide to designing scalable, low-latency, and cost-efficient LLM architectures, RAG pipelines, and autonomous AI agents.</strong></p>
 
   <p>
     <img src="https://img.shields.io/badge/System%20Design-LLM%20%26%20Agents-blueviolet?style=for-the-badge&logo=openai" alt="System Design" />
@@ -12,14 +12,15 @@
   </p>
 
   <p>
-    <a href="#-the-8-core-production-patterns"><img src="https://img.shields.io/badge/Catalog-8%20Core%20Patterns-blue?style=flat-square" /></a>
+    <a href="#-the-master-architecture-deep-dive"><img src="https://img.shields.io/badge/Architecture-Master%20Deep%20Dive-blue?style=flat-square" /></a>
+    <a href="#-the-8-core-production-patterns"><img src="https://img.shields.io/badge/Catalog-8%20Core%20Patterns-blueviolet?style=flat-square" /></a>
     <a href="#-production-latency--cost-budgets"><img src="https://img.shields.io/badge/Engineering-Latency%20%26%20Cost%20Math-orange?style=flat-square" /></a>
     <a href="#-the-production-disaster-manual"><img src="https://img.shields.io/badge/Reliability-Disaster%20Manual-red?style=flat-square" /></a>
     <a href="#-real-world-case-studies"><img src="https://img.shields.io/badge/Interviews-3%20Case%20Studies-brightgreen?style=flat-square" /></a>
     <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" />
   </p>
 
-  <sub>Star ⭐ this repository to bookmark this architecture handbook for technical interviews and production design!</sub>
+  <sub>Star ⭐ this repository to bookmark this production manual for system design interviews and enterprise architectures!</sub>
 
 </div>
 
@@ -28,6 +29,16 @@
 ## 📑 Table of Contents
 
 - [💡 Why LLM System Patterns?](#-why-llm-system-patterns)
+- [🏗️ The Master Architecture: Complete Production Lifecycle](#️-the-master-architecture-complete-production-lifecycle)
+- [🔍 Master Architecture Deep Dive (Node-by-Node Breakdown)](#-master-architecture-deep-dive-node-by-node-breakdown)
+  - [Step 1: User Query & Two-Tier Semantic Caching](#step-1-user-query--two-tier-semantic-caching)
+  - [Step 2: Query Transformation via HyDE (Hypothetical Document Embeddings)](#step-2-query-transformation-via-hyde)
+  - [Step 3: The Hybrid Retrieval Engine (Dense + Sparse)](#step-3-the-hybrid-retrieval-engine-dense--sparse)
+  - [Step 4: Reciprocal Rank Fusion (RRF)](#step-4-reciprocal-rank-fusion-rrf)
+  - [Step 5: Cross-Encoder Deep Attention Reranker](#step-5-cross-encoder-deep-attention-reranker)
+  - [Step 6: Hierarchical Parent-Child Context Packing](#step-6-hierarchical-parent-child-context-packing)
+  - [Step 7: Self-Corrective RAG (CRAG) Guardrails](#step-7-self-corrective-rag-crag-guardrails)
+  - [Step 8: Prefix Prompt Caching & Streaming Generation](#step-8-prefix-prompt-caching--streaming-generation)
 - [🧩 The 8 Core Production Patterns](#-the-8-core-production-patterns)
   - [1. Hybrid Retrieval & Reciprocal Rank Fusion (RRF)](#1-hybrid-retrieval--reciprocal-rank-fusion-rrf)
   - [2. Hypothetical Document Embeddings (HyDE)](#2-hypothetical-document-embeddings-hyde)
@@ -52,18 +63,20 @@
 
 ## 💡 Why LLM System Patterns?
 
-Traditional software engineering operates on deterministic state transitions and well-defined API contracts. In contrast, **LLM architectures are probabilistic, token-metered, and latency-heavy**. 
+Traditional software engineering operates on deterministic state machines and well-defined API boundaries. In contrast, **LLM architectures are probabilistic, token-metered, and latency-heavy**. 
 
-Moving from a prototype script to a production service with 99.9% uptime requires answering real engineering questions:
-* *How do we handle out-of-vocabulary acronyms and serial numbers that vector embeddings miss?*
-* *How do we keep end-to-end Time to First Token (TTFT) under $300\text{ms}$ while performing vector search and reranking?*
-* *How do we avoid catastrophic context window overflows and save 85% on model token billing?*
+Moving a prototype into an enterprise production environment with 99.9% uptime requires answering critical engineering questions:
+* *How do we handle out-of-vocabulary acronyms, serial numbers, and code variables that dense vector embeddings miss?*
+* *How do we keep end-to-end Time to First Token (TTFT) under $300\text{ms}$ while executing vector search, reranking, and safety checks?*
+* *How do we eliminate context window overflows while reducing LLM API token billing by 85%?*
 
-This repository documents the battle-tested architectural patterns, real mathematical budgets, and failure recovery protocols required to build scalable AI systems.
+This repository acts as an engineering manual documenting battle-tested architectural patterns, real mathematical budgets, and failure recovery protocols required to build scalable AI systems.
 
 ---
 
-## 🧩 The 8 Core Production Patterns
+## 🏗️ The Master Architecture: Complete Production Lifecycle
+
+The diagram below maps the complete end-to-end lifecycle of an enterprise-grade RAG and Agentic LLM request:
 
 ```mermaid
 flowchart TD
@@ -89,112 +102,210 @@ flowchart TD
 
 ---
 
-### 1. Hybrid Retrieval & Reciprocal Rank Fusion (RRF)
+## 🔍 Master Architecture Deep Dive (Node-by-Node Breakdown)
 
-#### The Problem
-Pure dense vector search (cosine similarity on embedding vectors) excels at conceptual understanding (e.g., matching *"feline medical issues"* with *"sick cat"*), but completely fails on exact keyword lookups: serial numbers, product SKUs, function names (`calculate_apr()`), and rare acronyms.
+To understand how high-throughput AI services operate in production, we break down each node of the master flowchart into its mechanical, mathematical, and operational components.
 
-#### The Pattern
-Combine **Dense Vector Search (HNSW)** with **Sparse Keyword Search (BM25 / SPLADE)** in parallel, then merge rankings using **Reciprocal Rank Fusion (RRF)**:
+---
+
+### Step 1: User Query & Two-Tier Semantic Caching
+
+```
+User Query ➔ [Tier 1: Exact Hash Lookup] ➔ [Tier 2: Vector Cosine Index] ➔ Hit/Miss Decision
+```
+
+#### The Problem:
+In consumer and enterprise chat interfaces, between **$25\%$ and $40\%$** of all incoming requests are semantically identical (e.g., *"How do I reset my password?"*, *"Where to change password"*, or *"Forgot password"*). Routing every identical question through vector retrieval, cross-encoder reranking, and LLM inference generates hundreds of dollars in unnecessary API costs and forces users to wait $1\text{--}3\text{ seconds}$ for answers that already exist.
+
+#### Production Implementation:
+We enforce a **Two-Tier Cache Hierarchy**:
+1. **Tier 1 (Exact Match - $O(1)$ in $<1\text{ms}$):**
+   * Normalizes the string: `query = trim(lowercase(raw_query))`
+   * Generates a deterministic SHA-256 hash: `hash = SHA256(query)`
+   * Performs an in-memory Redis key-value lookup. If found, the answer is returned immediately.
+2. **Tier 2 (Semantic Vector Similarity - $O(\log N)$ in $\sim 8\text{ms}$):**
+   * If Tier 1 misses, the query is converted into a vector embedding $\vec{q}$.
+   * We search an in-memory vector cache index in Redis or Qdrant containing previously answered queries.
+   * Cosine similarity is computed against previous queries $\vec{k}$:
+     $$S_C(\vec{q}, \vec{k}) = \frac{\vec{q} \cdot \vec{k}}{\|\vec{q}\|_2 \|\vec{k}\|_2}$$
+   * **The Production Threshold ($\tau$):** In real production systems, $\tau$ is strictly calibrated between **$0.92$ and $0.95$**.
+     * Setting $\tau < 0.90$ introduces catastrophic *false positives* (e.g., matching *"Can I cancel my account?"* with *"How do I upgrade my account?"*).
+     * Setting $\tau \ge 0.94$ guarantees accurate semantic reuse.
+     * **Cache Hit Result:** The cached completion is returned in **$\sim 10\text{ms}$ at $\$0.00$ incremental cost**.
+
+---
+
+### Step 2: Query Transformation via HyDE
+
+```
+Raw Query ("403 s3 cors") ➔ Fast SLM Generates Hypothetical Passage ➔ Embed Hypothetical Doc
+```
+
+#### The Problem: The Asymmetric Search Gap
+User prompts are typically **short, informal, and keyword-starved** (e.g., *"aws s3 403 cors error"* — 5 words). 
+Conversely, the technical documentation, runbooks, or source files containing the answer are **dense, formal, and explanatory** (500 words).
+
+In high-dimensional embedding space, a 5-word question embedding occupies a completely different vector cluster than a 500-word explanatory answer. This divergence causes standard vector search to miss the most relevant technical documents.
+
+#### The HyDE Solution:
+1. Instead of embedding the raw query directly, we route the user query to a fast, cheap Small Language Model (SLM) such as `Llama-3-8B` or `Gemini-Flash` with a specialized prompt:
+   > *"Write a concise, 1-paragraph technical documentation excerpt that directly answers this question: [User Query]. Do not worry about factual perfection; focus on technical terminology and syntax."*
+2. The SLM outputs a hypothetical passage loaded with high-signal domain vocabulary: `AccessDenied`, `BucketPolicy`, `CORSRules`, `AllowedOrigins`, `OPTIONS preflight`.
+3. Even if the passage contains minor factual inaccuracies, **its embedding vector lands directly inside the cluster of real production documentation**.
+4. Real-world benchmark: HyDE boosts retrieval recall by **$30\text{--}35\%$** over raw query embeddings.
+
+---
+
+### Step 3: The Hybrid Retrieval Engine (Dense + Sparse)
+
+```
+                            ┌──> Dense Search: HNSW on Embeddings  (Semantic Meaning) ──┐
+Hypothetical Query Vector ──┤                                                           ├──> RRF
+Raw Text Query Tokens    ───┴──> Sparse Search: BM25 on Inverted Index (Exact Keywords) ─┘
+```
+
+#### Why Dense Embeddings Alone Fail in Production:
+Dense vector search (Cosine similarity over vector embeddings) understands *conceptual meaning*, but it is blind to *exact character sequences*.
+* If an engineer searches for a specific error code like `ERR_SOCKET_TIMEOUT_0x82` or an internal SKU `INV-9021-X`, dense embeddings smooth those characters into generic networking vectors.
+* If a doctor searches for a specific drug dosage `"Zestril 20mg"`, dense search may pull up `"Lisinopril 10mg"` because they share the same therapeutic classification.
+
+#### The Dual-Engine Solution:
+Execute two retrieval algorithms in parallel:
+1. **Dense Retrieval (HNSW):** 
+   * Traverses a Hierarchical Navigable Small World graph in $O(\log N)$ time ($\sim 5\text{ms}$).
+   * Matches conceptual context, intent, synonyms, and cross-lingual queries.
+2. **Sparse Retrieval (BM25 / SPLADE):**
+   * Uses an inverted index based on Term Frequency-Inverse Document Frequency (TF-IDF).
+   * Matches exact tokens, serial numbers, variable names, and error codes.
+
+---
+
+### Step 4: Reciprocal Rank Fusion (RRF)
+
+#### The Problem: The Incompatible Scale Dilemma
+You cannot simply add BM25 scores to Cosine Similarity scores:
+* **Cosine Similarity** is bounded: $[-1.0, +1.0]$.
+* **BM25 Scores** are unbounded: they can be $3.2$, $19.4$, or $74.0$ depending on document length and term frequency across the corpus.
+
+Summing raw scores without calibration causes BM25 to completely overpower the dense vector score.
+
+#### The Mathematical Fix: Reciprocal Rank Fusion
+RRF eliminates raw scores entirely. Instead, it evaluates the **rank position** of each document in both candidate lists:
 
 $$RRF\_Score(d \in D) = \sum_{m \in M} \frac{1}{k + rank_m(d)}$$
 
 Where:
-* $M$ is the set of rankers (Dense + Sparse).
-* $rank_m(d)$ is the position of document $d$ in system $m$.
+* $M$ is the set of retrieval systems (Dense + Sparse).
+* $rank_m(d)$ is the 1-based index position of document $d$ in system $m$.
 * $k$ is a smoothing constant (standard industry default: $k = 60$).
 
-```python
-def reciprocal_rank_fusion(dense_ranks: list[str], sparse_ranks: list[str], k: int = 60) -> list[tuple[str, float]]:
-    scores = {}
-    for rank, doc_id in enumerate(dense_ranks):
-        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank + 1))
-    for rank, doc_id in enumerate(sparse_ranks):
-        scores[doc_id] = scores.get(doc_id, 0.0) + (1.0 / (k + rank + 1))
-    return sorted(scores.items(), key=lambda item: item[1], reverse=True)
+#### Practical Example:
+Suppose Document $A$ ranks **#1** in Dense and **#2** in Sparse:
+$$Score(A) = \frac{1}{60 + 1} + \frac{1}{60 + 2} = \frac{1}{61} + \frac{1}{62} \approx 0.01639 + 0.01612 = 0.03251$$
+
+Suppose Document $B$ ranks **#1** in Dense, but does not appear in the Sparse top 100:
+$$Score(B) = \frac{1}{60 + 1} + 0 = 0.01639$$
+
+Document $A$ automatically wins because it demonstrated dual-engine consensus. RRF outputs an optimal merged pool of the **Top 25 candidates**.
+
+---
+
+### Step 5: Cross-Encoder Deep Attention Reranker
+
+```
+Top 25 Candidates from RRF ➔ Cross-Encoder Transformer ➔ Top 5 Ultra-Relevant Chunks
 ```
 
+#### Bi-Encoder vs. Cross-Encoder:
+* **Bi-Encoder (Used in Vector Search):** Encodes the query and document *independently* into isolated vectors, then computes their dot product. It is lightning-fast, but lacks deep token-to-token interaction.
+* **Cross-Encoder (Used in Reranking):** Feeds the query AND document *together* into a single transformer encoder:
+  $$\text{Input} = [\text{CLS}] \circ \text{Query Tokens} \circ [\text{SEP}] \circ \text{Document Tokens} \circ [\text{SEP}]$$
+  This allows self-attention heads to cross-examine every single query word against every single document word simultaneously.
+
+#### The Production Latency Trade-Off:
+Cross-encoders are computationally expensive: running one across $1{,}000{,}000$ documents would take 30 seconds. However, running a Cross-Encoder (such as `bge-reranker-large` or `cohere-rerank`) on just the **Top 25 candidates takes only $\sim 40\text{ms}$**.
+
+It filters out the $20$ borderline or irrelevant passages and produces the **Top 5 ultra-high-signal chunks**, cutting context window bloat and eliminating hallucinations.
+
 ---
+
+### Step 6: Hierarchical Parent-Child Context Packing
+
+```
+Matched 128-Token Child Chunk ➔ Retrieve Parent ID from DB ➔ Pack Full 1024-Token Parent Section
+```
+
+* **Child Chunks ($128$ tokens):** Stored in the vector database index. Small chunks maximize embedding resolution and produce high cosine similarity matches.
+* **Parent Chunks ($1024$ tokens):** Stored in a relational database (PostgreSQL) or document store. Contains the full surrounding section, parent headers, and following context.
+* **Execution:** When the Cross-Encoder selects the Top 5 child chunks, the application swaps them for their **Parent Chunks**. The LLM receives full, coherent documentation paragraphs rather than isolated 2-sentence fragments.
+
+---
+
+### Step 7: Self-Corrective RAG (CRAG) Guardrails
+
+```
+Retrieved Context ➔ Fast Evaluator Classifier:
+  ├── [Confidence >= 0.85] ➔ High Quality: Proceed to LLM Generator
+  ├── [0.50 <= Conf < 0.85] ➔ Ambiguous: Strip noisy sentences + Synthesize with hedge warnings
+  └── [Confidence < 0.50]  ➔ Low Quality: Trigger Web Search Fallback or Escalate to Human
+```
+
+Naive RAG blindly feeds retrieved text into the LLM even when search quality is terrible, directly causing hallucinations. CRAG introduces an automated evaluation gatekeeper:
+1. A fast classifier checks: *"Do these passages contain the direct factual evidence needed to answer the user query?"*
+2. **Three-Way Branching:**
+   * **Correct (Confidence $\ge 0.85$):** Passages are clean. Forward to LLM.
+   * **Ambiguous ($0.50 \le \text{Conf} < 0.85$):** Passages contain partial information. Strip irrelevant sentences via sentence-level filtering and instruct the LLM to output hedge warnings.
+   * **Incorrect ($\text{Confidence} < 0.50$):** Retrieval completely failed (the document doesn't exist in the knowledge base). Automatically trigger an external web search API (Tavily/Perplexity) or return: *"The knowledge base does not contain sufficient verified data to answer this question."*
+
+---
+
+### Step 8: Prefix Prompt Caching & Streaming Generation
+
+```
+Static System Prompt + Tool Schemas (Cached at 90% Discount) + Dynamic Context ➔ LLM Streaming
+```
+
+1. **Prefix Prompt Caching:**
+   * Modern LLM APIs (Anthropic Prompt Caching & OpenAI Cached Tokens) allow developers to cache static prompt prefixes.
+   * **The Cardinal Ordering Rule:** Always order prompts from **static to dynamic**:
+     $$\text{System Prompt} \rightarrow \text{Tool Schemas} \rightarrow \text{Few-Shot Examples} \rightarrow \text{Retrieved Docs} \rightarrow \text{Chat History} \rightarrow \text{User Query}$$
+   * The provider recognizes identical byte blocks in the KV-cache, providing up to a **$90\%$ discount on input tokens** and slashing Time to First Token (TTFT) by $70\%$.
+2. **Streaming Execution:**
+   * Never wait for full generation completion ($2\text{--}5\text{ seconds}$).
+   * Stream tokens immediately over Server-Sent Events (SSE) or WebSockets. The user sees output begin within **$\sim 200\text{ms}$**, delivering an instantaneous user experience.
+
+---
+
+## 🧩 The 8 Core Production Patterns
+
+### 1. Hybrid Retrieval & Reciprocal Rank Fusion (RRF)
+* **Goal:** Combine dense semantic search and sparse exact keyword matching into a single normalized candidate ranking.
+* **Formula:** $RRF\_Score(d) = \sum_{m} \frac{1}{k + rank_m(d)}$ (Default $k=60$).
+* **When to use:** In any production system dealing with domain-specific jargon, error codes, legal references, or product SKUs.
 
 ### 2. Hypothetical Document Embeddings (HyDE)
-
-#### The Problem
-User queries are often terse and underspecified (e.g., *"error 403 on s3 bucket policy"*). Embedding a short 6-word query produces a vector that lives in a different sub-manifold than a comprehensive 500-word documentation page.
-
-#### The Pattern
-1. Instruct a fast, cheap SLM (Small Language Model like Llama-3-8B or Gemini-Flash) to generate a **hypothetical answer** to the query.
-2. Embed the *hypothetical answer* rather than the raw query.
-3. Use that rich dense embedding to search the vector index. The hypothetical answer is syntactically and semantically closer to the true target passage.
-
----
+* **Goal:** Bridge the asymmetric search gap between terse user queries and long documentation paragraphs.
+* **Mechanism:** Generate a zero-shot hypothetical answer via a cheap SLM and embed that answer to perform vector retrieval.
 
 ### 3. Two-Tier Semantic Caching & Token Routing
-
-#### The Problem
-$30\text{--}40\%$ of incoming user requests in customer-facing applications are semantically identical (e.g., *"How do I reset my password?"* vs *"Where to change password"*). Routing every request to an LLM wastes API budget and adds $500\text{ms}\text{--}2000\text{ms}$ of unnecessary latency.
-
-#### The Pattern
-Implement a two-tier cache before the retrieval engine:
-1. **Tier 1 (Exact Match):** In-memory SHA-256 hash lookup ($O(1)$, $<1\text{ms}$).
-2. **Tier 2 (Semantic Match):** High-dimensional index lookup in Redis/Qdrant. If cosine similarity $S_C(\vec{v}_{query}, \vec{v}_{cached}) \ge \tau$ (where $\tau \approx 0.94$), return the cached completion directly.
-
----
+* **Goal:** Eliminate redundant LLM calls and cut API costs by $30\text{--}40\%$.
+* **Mechanism:** Exact SHA-256 string hash in Redis ($<1\text{ms}$) combined with vector similarity matching ($\tau \ge 0.94$).
 
 ### 4. Hierarchical Parent-Child Chunking
-
-#### The Problem
-* **Small Chunks ($128$ tokens):** Optimal for embedding similarity (high signal-to-noise ratio), but strip away surrounding contextual nuance needed by the generator.
-* **Large Chunks ($1024$ tokens):** Contain sufficient context for generation, but average out specific embeddings, resulting in poor retrieval accuracy.
-
-#### The Pattern
-Decouple the **retrieval index** from the **generation payload**:
-1. Split documents into large **Parent Chunks** ($1024$ tokens).
-2. Subdivide each parent into 4–8 small **Child Chunks** ($128$ tokens) with a reference ID pointing to the parent.
-3. Search and match child chunks against user queries.
-4. When a child chunk matches, pass its **full parent chunk** into the LLM context window.
-
----
+* **Goal:** Decouple the retrieval unit from the generation context unit.
+* **Mechanism:** Embed 128-token child chunks for precision; inject 1024-token parent chunks into the LLM for comprehension.
 
 ### 5. Self-Corrective RAG (CRAG) & Active Guardrails
-
-#### The Problem
-Naive RAG blindly feeds retrieved documents into the LLM even when retrieval confidence is low, leading directly to hallucinated responses.
-
-#### The Pattern
-Implement an autonomous evaluation loop prior to synthesis:
-1. **Confidence Evaluator:** A lightweight classification step evaluates whether retrieved passages directly contain sufficient information to answer the prompt.
-2. **Three-Way Branching:**
-   * **Correct:** High confidence $\rightarrow$ Proceed to LLM generator with prompt caching.
-   * **Ambiguous:** Medium confidence $\rightarrow$ Strip irrelevant sentences via passage filtering + synthesize with hedge language.
-   * **Incorrect:** Low confidence $\rightarrow$ Trigger fallback search (external web search API or human-in-the-loop escalation).
-
----
+* **Goal:** Prevent hallucinations when the retrieval engine returns low-quality or irrelevant passages.
+* **Mechanism:** Pre-generation confidence scoring with 3-way branching: proceed, strip noise, or fallback to external search.
 
 ### 6. Stateful Multi-Agent Supervisor & Tool Calling
-
-#### The Problem
-Monolithic single-agent loops with 30+ available tools suffer from tool confusion, hallucinated arguments, and catastrophic context window drift over multi-turn execution.
-
-#### The Pattern
-Split the system into a **Hierarchical Supervisor Architecture**:
-* **Supervisor / Router:** Classifies user intent and delegates work to isolated specialized agents (`DatabaseAgent`, `CodingAgent`, `SummarizerAgent`).
-* **Specialized Workers:** Hold strict, narrow tool definitions ($3\text{--}5$ tools maximum) and run in isolated execution envelopes.
-* **Global Memory Checkpoint:** A central state-machine (Redis/PostgreSQL) tracks cycle counts and enforces hard termination thresholds to prevent runaway infinite loops.
-
----
+* **Goal:** Prevent tool confusion and infinite execution loops in complex agentic workflows.
+* **Mechanism:** A supervisor router orchestrates narrow specialized worker agents ($3\text{--}5$ tools max) with Redis state checkpointing and hard cycle limits.
 
 ### 7. Prompt Prefix Caching & TTFT Optimization
-
-#### The Problem
-Modern agentic workflows append extensive system prompts, tool schemas, and document chunks on every turn. Re-encoding 20k tokens on every request destroys Time to First Token (TTFT) and inflates billing.
-
-#### The Pattern
-Structure prompt templates strictly to maximize **Prefix Caching** compatibility (Anthropic Prompt Caching & OpenAI Cached Tokens):
-* **Order matters:** Always place **100% static content first** (System Prompt $\rightarrow$ Tool Schemas $\rightarrow$ Few-Shot Examples $\rightarrow$ Invariant Documentation).
-* Place **dynamic content last** (Chat History $\rightarrow$ User Query).
-* Result: Providers recognize identical prefix byte blocks, delivering up to **90% cost discounts** and sub-$200\text{ms}$ TTFT.
-
----
+* **Goal:** Minimize latency and reduce token costs by up to $90\%$ on repetitive agent turns.
+* **Mechanism:** Strict ordering of static byte blocks (system prompts, tool definitions) before dynamic chat history.
 
 ### 8. Vector Index Selection: HNSW vs. IVFFlat vs. DiskANN
 
@@ -210,8 +321,6 @@ Structure prompt templates strictly to maximize **Prefix Caching** compatibility
 ## ⏱️ Production Latency & Cost Budgets
 
 ### The Sub-300ms End-to-End Latency Waterfall
-For real-time user experiences, modern production systems must adhere to a strict latency budget:
-
 ```
 [Client Request]
        │
