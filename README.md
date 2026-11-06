@@ -456,6 +456,16 @@ Contributions, architectural additions, and verified production benchmarks are w
 
 ---
 
+## 🌟 Show Your Support — Star This Repo!
+
+If this architectural guide helped you prepare for an AI system design interview, design production RAG pipelines, or understand low-latency LLM engineering:
+
+* ⭐ **Give this repository a star** — it directly supports free, open-source AI education and helps more engineers find it!
+* 🍴 **Fork it** — use it as your personal study guide or production architecture blueprint.
+* 📢 **Share it** — spread the word to your college peers, engineering teams, or on LinkedIn & X (Twitter)!
+
+---
+
 ## 👨‍💻 Author & Maintainer
 
 Maintained with ❤️ by **[Ganesh Yandigeri](https://github.com/Gana-Y)**
